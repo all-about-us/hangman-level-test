@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html>
+
+<head><title>Hangman's game</title>
+
+	<h2>Powered with words and definitions from Merriam-Webster's Learners Dictionary<p></p>
+	<img src="Merriam-Webster_logo.png"></h2>
+
+</head>
+
+<body style="background-color:rgb(192,226,211)">
+	<h1 style="text-align:center;color:rgb(48,16,78)"><strong>This is <em>Hangman's</em> game</strong></h1>
+	<p style="text-align:center"><img src="hangman.png" height=250 width=250></p>
+	<p>If you want to check your spelling, go to <a href="https://www.merriam-webster.com">Merriam-Webster online</a> and good luck!</p>
+	
+	
+	<div id="level-selection" style="margin-bottom: 15px;">
+    <h4>Избери ниво:</h4>
+    <button class="level-button" data-level-file="words-beginner.txt" disabled>Начално</button>
+    <button class="level-button" data-level-file="words-intermediate.txt" disabled>Средно</button>
+    <button class="level-button" data-level-file="words-advanced.txt" disabled>Напреднало</button>
+</div>
+	
+	
+	<div id="game-info" style="margin-top: 20px;">
+		<h3>Word definition from Merriam-Webster's Learner Dictionary:</h3>
+		<p id="word-definition" style="font-style: italic;"></p>
+		<button id="new-word-button">Choose another word</button>
+	</div>
+
+	
+    <div id="game-container" style="text-align: center">
+        <h2 id="word-mask"></h2>    <p id="guesses-left"></p>   <p id="message-area"></p>  <p id="feedback-area"></p> 
+		<label for="guess-input">Enter a letter:</label>
+        <input type="text" id="guess-input" maxlength="1" style="width: 50px">
+		<p></p>
+        <button id="submit-guess">Check response</button>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-2.1.0.js"></script>
+    
+<script>
+    
+    // =======================================================================
+    // ГЛОБАЛНИ ПРОМЕНЛИВИ И КОНСТАНТИ
+    // =======================================================================
+    let filteredWords = []; 
+    let currentWordListFile = "words-intermediate.txt"; // Начално ниво по подразбиране
+    
+    var word;
+    var answerArray;
+	var remainingGuesses;
+	var remainingLetters;
+	var pastGuesses = [];
+
+    // Константи за API
+    const MW_API_KEY = `62ef63d6-1b72-4711-867f-2f2b6152b0da`; 
+    const MW_DICTIONARY_URL = `https://www.dictionaryapi.com/api/v3/references/learners/json/`; 
+    
+    
+    // =======================================================================
+    // 1. АСИНХРОННИ ФУНКЦИИ (I/O)
+    // =======================================================================
+    
+    // Кеш за думите, за да не четем един и същ файл многократно
+    const wordCache = {}; 
+    
+    async function fetchWordList(filePath) {
+        // Проверка в кеша: ако вече имаме думи за този файл, ги използваме.
+        if (wordCache[filePath] && wordCache[filePath].length > 0) {
+            filteredWords = wordCache[filePath];
+            currentWordListFile = filePath;
+            return;
+        }
+
+        try {
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                throw new Error(`HTTP грешка: ${response.status} при зареждане на ${filePath}`);
+            }
+            const text = await response.text();
+            
+            let newWords = text.split('\n')
+                               .map(w => w.trim().toLowerCase())
+                               .filter(w => w.length > 0 && /^[a-z]+$/.test(w));
+            
+            filteredWords = newWords;
+            wordCache[filePath] = newWords; // Запазваме в кеша
+            currentWordListFile = filePath; // Обновяваме текущия файл
+            
+            console.log(`Word list loaded successfully from ${filePath}. Total words: ${filteredWords.length}`);
+        } catch (error) {
+            console.error(`Грешка при зареждане на ${filePath}. Използване на резервен списък:`, error);
+            filteredWords = ["computer", "script", "coding", "async", "level"];
+        }
+    }
+
+
+    // =======================================================================
+    // 2. СИНХРОННИ ФУНКЦИИ (ИЗБОР)
+    // =======================================================================
+    
+    function pickWord() {
+        if (filteredWords.length === 0) {
+            console.error("No words loaded. Returning fallback 'error'.");
+            return "error"; 
+        }
+        return filteredWords[Math.floor(Math.random() * filteredWords.length)];
+    }
+
+    // =======================================================================
+    // 3. ФУНКЦИИ ЗА ЛОГИКАТА НА ИГРАТА
+    // =======================================================================
+    
+	function setupWordsArray(word){
+		var answerArray=[];
+		for(var i = 0; i < word.length; i++){
+			answerArray[i] = "_";}
+		return answerArray;}
+	
+	function updateGameState(guess, word, answerArray){
+		var correctGuesses = 0;
+		for (var i = 0; i < word.length; i++){
+			if(guess.toLowerCase() === word[i] && answerArray[i] === "_"){
+				answerArray[i] = guess; correctGuesses++;}}
+		
+		if (correctGuesses === 0) {pastGuesses.push(guess.toUpperCase());remainingGuesses--;}
+		return correctGuesses;}
+	
+	function updateDisplay(answerArray, message = "") {
+		$("#word-mask").text(answerArray.join(" "));
+		$("#guesses-left").text(`Имате ${remainingGuesses} опита.`);
+		$("#message-area").text(message);
+		if (pastGuesses.length != 0) {$("#feedback-area").text(`Вече опитахте с ${pastGuesses.join(", ")}`);}
+		else {$("#feedback-area").text("");}
+		if (remainingGuesses <= 0 || remainingLetters <= 0) {$("#guesses-left").text(``);
+            $("#guess-input, #submit-guess").prop('disabled', true);}}
+    
+	function endGame() {
+		var finalWord = word.toUpperCase();
+		if (remainingLetters === 0) {
+			$("#message-area").html(`<strong>Поздравления! Отговорът е: ${finalWord}</strong>`);}
+		else { $("#message-area").html(`<strong>Опитите свършиха! Думата беше: ${finalWord}</strong>`);}}
+
+
+	function initializeGame(newWord) {
+        if (newWord === "error") {
+            word = "error";
+            return;
+        }
+
+		word = newWord; 
+		answerArray = setupWordsArray(word); 
+		remainingGuesses = 10; 
+		remainingLetters = word.length;
+		pastGuesses = []; 
+		updateDisplay(answerArray, "Въведете вашата буква.");
+		$("#guess-input, #submit-guess").prop('disabled', false);}
+    
+    
+	function handleGuess() {
+		var guess = $("#guess-input").val().trim().toLowerCase();
+        
+        if (word === "error") {
+             updateDisplay([], "Първо рестартирайте играта.");
+             $("#guess-input").val("");
+             return;
+        }
+		
+		
+		if (guess.length !== 1 || !/^[a-z]$/.test(guess)) {
+			updateDisplay(answerArray, "Моля, въведете само една валидна буква.");
+			$("#guess-input").val("");
+			return;}
+        
+        if (pastGuesses.includes(guess.toUpperCase())) {
+            updateDisplay(answerArray, `Вече опитахте буквата '${guess.toUpperCase()}'. Опитайте друга.`);
+            $("#guess-input").val("");
+            return;
+        }
+
+		var correctGuesses = updateGameState(guess, word, answerArray); 
+		
+		if (correctGuesses > 0) {
+			remainingLetters -= correctGuesses;
+			updateDisplay(answerArray, `Поздравления! Буквата '${guess.toUpperCase()}' е намерена!`);}
+		else {updateDisplay(answerArray, `Грешна буква! Няма буква '${guess.toUpperCase()}' в думата.`);}
+		
+		if (remainingGuesses <= 0 || remainingLetters <= 0) {endGame();}
+        
+		$("#guess-input").val("");}
+    
+    
+    // =======================================================================
+    // 4. ГЛАВНА ФУНКЦИЯ: startNewGame() (АСИНХРОННА)
+    // =======================================================================
+    async function startNewGame(filePath = currentWordListFile) {
+        // Деактивираме контролите и показваме зареждане
+        $("#new-word-button").prop('disabled', true).text('Зареждане...');
+        $("#guess-input, #submit-guess").prop('disabled', true);
+        $("#word-definition").text('... Извличане на дума и дефиниция...');
+
+        // 1. ИЗЧАКВАМЕ зареждането на списъка (може да е ново зареждане или от кеша)
+        await fetchWordList(filePath); 
+
+        const MAX_ATTEMPTS = 5;
+        let selectedWord = "error";
+        let definitionText = "Неуспешно извличане на дефиниция след 5 опита или проблем със списъка с думи.";
+
+        // Цикъл за повторен опит, ако API не върне дефиниция за думата
+        for (let attempts = 1; attempts <= MAX_ATTEMPTS; attempts++) {
+            
+            selectedWord = pickWord(); 
+            if (selectedWord === "error") break;
+
+            try {
+                // 2. АСИНХРОННА API ЗАЯВКА
+                let mwResponse = await fetch(`${MW_DICTIONARY_URL}${selectedWord}?key=${MW_API_KEY}`);
+                
+                if (!mwResponse.ok) {
+                    throw new Error(`HTTP Error! Status: ${mwResponse.status}`);
+                }
+
+                let mwData = await mwResponse.json();
+                
+                // 3. Проверка на резултата
+                if (Array.isArray(mwData) && mwData[0] && mwData[0].shortdef && mwData[0].shortdef.length > 0) {
+                    definitionText = mwData[0].shortdef[0];
+                    break; // Успех! Излизаме от цикъла
+                } 
+
+            } catch (error) {
+                console.error("Error fetching definition (retrying):", error);
+            }
+        } 
+
+        // 4. Актуализация на UI
+        $("#word-definition").text(definitionText);
+        
+        if (definitionText.startsWith("Неуспешно")) {
+             $("#word-mask").text("ГРЕШКА");
+             $("#message-area").text(definitionText);
+        } else {
+            // Успех
+            initializeGame(selectedWord); 
+        }
+
+        // Активираме бутоните
+        $("#new-word-button").prop('disabled', false).text('Избери друга дума');
+        
+        // Активираме бутоните за ниво, деактивираме избрания
+        $('.level-button').prop('disabled', false);
+        $(`button[data-level-file='${currentWordListFile}']`).prop('disabled', true);
+
+        // Активираме инпута само при успех
+        if (!definitionText.startsWith("Неуспешно")) {
+            $("#guess-input, #submit-guess").prop('disabled', false); 
+        }
+    }
+    
+    // =======================================================================
+    // 5. ФУНКЦИЯ ЗА ИЗБОР НА НИВО
+    // =======================================================================
+    function selectLevelAndStartGame(event) {
+        const newFilePath = $(event.currentTarget).data('level-file');
+        
+        // Стартираме играта с новия файл
+        startNewGame(newFilePath);
+    }
+	
+	// =======================================================================
+    // 6. ИНИЦИАЛИЗАЦИЯ (document.ready)
+    // =======================================================================
+	$(document).ready(function() {
+        
+        // 1. Прикачваме събития към бутоните за ниво
+        $('.level-button').click(selectLevelAndStartGame);
+
+        // 2. Прикачваме събития към бутоните на играта
+		$("#submit-guess").click(handleGuess);
+		$("#guess-input").on('keypress', function(e) {
+			if (e.which === 13) { handleGuess();}
+		});
+        $("#new-word-button").click(startNewGame);
+        
+        // 3. Първоначално стартиране на играта (с нивото по подразбиране)
+		startNewGame(); 
+	});
+    
+	
+</script>
+	</body>
