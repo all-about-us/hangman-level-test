@@ -24,7 +24,7 @@
 	
 	
 	<div id="game-info" style="margin-top: 20px;">
-		<h3>Word definition from Merriam-Webster's Learner Dictionary:</h3>
+		<h3>Word definition from Merriam-Webster's Learner's Dictionary:</h3>
 		<p id="word-definition" style="font-style: italic;"></p>
 		<button id="new-word-button">Choose another word</button>
 	</div>
@@ -42,11 +42,9 @@
     
 <script>
     
-    // =======================================================================
-    // ГЛОБАЛНИ ПРОМЕНЛИВИ И КОНСТАНТИ
-    // =======================================================================
+    
     let filteredWords = []; 
-    let currentWordListFile = "words-intermediate.txt"; // Начално ниво по подразбиране
+    let currentWordListFile = "words-intermediate.txt";
     
     var word;
     var answerArray;
@@ -54,20 +52,16 @@
 	var remainingLetters;
 	var pastGuesses = [];
 
-    // Константи за API
+    
     const MW_API_KEY = `62ef63d6-1b72-4711-867f-2f2b6152b0da`; 
     const MW_DICTIONARY_URL = `https://www.dictionaryapi.com/api/v3/references/learners/json/`; 
     
     
-    // =======================================================================
-    // 1. АСИНХРОННИ ФУНКЦИИ (I/O)
-    // =======================================================================
     
-    // Кеш за думите, за да не четем един и същ файл многократно
     const wordCache = {}; 
     
     async function fetchWordList(filePath) {
-        // Проверка в кеша: ако вече имаме думи за този файл, ги използваме.
+        
         if (wordCache[filePath] && wordCache[filePath].length > 0) {
             filteredWords = wordCache[filePath];
             currentWordListFile = filePath;
@@ -86,8 +80,8 @@
                                .filter(w => w.length > 0 && /^[a-z]+$/.test(w));
             
             filteredWords = newWords;
-            wordCache[filePath] = newWords; // Запазваме в кеша
-            currentWordListFile = filePath; // Обновяваме текущия файл
+            wordCache[filePath] = newWords; 
+            currentWordListFile = filePath; 
             
             console.log(`Word list loaded successfully from ${filePath}. Total words: ${filteredWords.length}`);
         } catch (error) {
@@ -97,9 +91,7 @@
     }
 
 
-    // =======================================================================
-    // 2. СИНХРОННИ ФУНКЦИИ (ИЗБОР)
-    // =======================================================================
+
     
     function pickWord() {
         if (filteredWords.length === 0) {
@@ -109,9 +101,6 @@
         return filteredWords[Math.floor(Math.random() * filteredWords.length)];
     }
 
-    // =======================================================================
-    // 3. ФУНКЦИИ ЗА ЛОГИКАТА НА ИГРАТА
-    // =======================================================================
     
 	function setupWordsArray(word){
 		var answerArray=[];
@@ -192,30 +181,28 @@
 		$("#guess-input").val("");}
     
     
-    // =======================================================================
-    // 4. ГЛАВНА ФУНКЦИЯ: startNewGame() (АСИНХРОННА)
-    // =======================================================================
+
     async function startNewGame(filePath = currentWordListFile) {
-        // Деактивираме контролите и показваме зареждане
+        
         $("#new-word-button").prop('disabled', true).text('Зареждане...');
         $("#guess-input, #submit-guess").prop('disabled', true);
         $("#word-definition").text('... Извличане на дума и дефиниция...');
 
-        // 1. ИЗЧАКВАМЕ зареждането на списъка (може да е ново зареждане или от кеша)
+        
         await fetchWordList(filePath); 
 
         const MAX_ATTEMPTS = 5;
         let selectedWord = "error";
         let definitionText = "Неуспешно извличане на дефиниция след 5 опита или проблем със списъка с думи.";
 
-        // Цикъл за повторен опит, ако API не върне дефиниция за думата
+        
         for (let attempts = 1; attempts <= MAX_ATTEMPTS; attempts++) {
             
             selectedWord = pickWord(); 
             if (selectedWord === "error") break;
 
             try {
-                // 2. АСИНХРОННА API ЗАЯВКА
+                
                 let mwResponse = await fetch(`${MW_DICTIONARY_URL}${selectedWord}?key=${MW_API_KEY}`);
                 
                 if (!mwResponse.ok) {
@@ -224,67 +211,62 @@
 
                 let mwData = await mwResponse.json();
                 
-                // 3. Проверка на резултата
+                
                 if (Array.isArray(mwData) && mwData[0] && mwData[0].shortdef && mwData[0].shortdef.length > 0) {
                     definitionText = mwData[0].shortdef[0];
-                    break; // Успех! Излизаме от цикъла
-                } 
+                    break; 
 
             } catch (error) {
                 console.error("Error fetching definition (retrying):", error);
             }
         } 
 
-        // 4. Актуализация на UI
+        
         $("#word-definition").text(definitionText);
         
         if (definitionText.startsWith("Неуспешно")) {
              $("#word-mask").text("ГРЕШКА");
              $("#message-area").text(definitionText);
         } else {
-            // Успех
+            
             initializeGame(selectedWord); 
         }
 
-        // Активираме бутоните
+        
         $("#new-word-button").prop('disabled', false).text('Избери друга дума');
         
-        // Активираме бутоните за ниво, деактивираме избрания
+       
         $('.level-button').prop('disabled', false);
         $(`button[data-level-file='${currentWordListFile}']`).prop('disabled', true);
 
-        // Активираме инпута само при успех
+        
         if (!definitionText.startsWith("Неуспешно")) {
             $("#guess-input, #submit-guess").prop('disabled', false); 
         }
     }
     
-    // =======================================================================
-    // 5. ФУНКЦИЯ ЗА ИЗБОР НА НИВО
-    // =======================================================================
+    
     function selectLevelAndStartGame(event) {
         const newFilePath = $(event.currentTarget).data('level-file');
         
-        // Стартираме играта с новия файл
+        
         startNewGame(newFilePath);
     }
 	
-	// =======================================================================
-    // 6. ИНИЦИАЛИЗАЦИЯ (document.ready)
-    // =======================================================================
+	
 	$(document).ready(function() {
         
-        // 1. Прикачваме събития към бутоните за ниво
+        
         $('.level-button').click(selectLevelAndStartGame);
 
-        // 2. Прикачваме събития към бутоните на играта
+        
 		$("#submit-guess").click(handleGuess);
 		$("#guess-input").on('keypress', function(e) {
 			if (e.which === 13) { handleGuess();}
 		});
         $("#new-word-button").click(startNewGame);
         
-        // 3. Първоначално стартиране на играта (с нивото по подразбиране)
+        
 		startNewGame(); 
 	});
     
@@ -292,4 +274,5 @@
 </script>
 
 	</body>
+
 
